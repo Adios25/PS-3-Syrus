@@ -6,6 +6,7 @@ export interface SourceReference {
   source_id: string;
   title: string;
   section: string;
+  source_file?: string;
 }
 
 export interface Message {
@@ -18,11 +19,15 @@ export interface Message {
 
 export interface ChecklistItem {
   item_id: number;
+  checklist_code?: string;
   title: string;
   description: string;
   category: string;
+  owner?: string;
+  deadline?: string;
   source_refs: string[];
   is_completed: boolean;
+  completed_at?: string | null;
 }
 
 export interface Profile {
@@ -32,26 +37,95 @@ export interface Profile {
   role: string | null;
   experience_level: string | null;
   tech_stack: string[];
+  employee_id?: string | null;
+  department?: string | null;
+  manager_name?: string | null;
+  manager_email?: string | null;
+  mentor_name?: string | null;
+  mentor_email?: string | null;
+  location?: string | null;
+  start_date?: string | null;
+  matched_persona_name?: string | null;
 }
 
 export interface CompletionEmailPayload {
-  to: string;
+  to: string[];
+  cc: string[];
+  from: string;
   subject: string;
   employee: {
     name: string | null;
+    employee_id?: string | null;
     email: string | null;
     role: string | null;
+    department?: string | null;
     team: string | null;
-    experience_level: string | null;
+    manager_name?: string | null;
+    manager_email?: string | null;
+    mentor_name?: string | null;
+    mentor_email?: string | null;
+    start_date?: string | null;
+    location?: string | null;
     tech_stack: string[];
   };
   summary: {
     status: string;
-    completed_items: string[];
-    pending_items: string[];
-    completion_timestamp_utc: string;
+    completion_date: string;
+    completion_timestamp_iso: string;
+    total_duration_business_days: number;
   };
+  checklist_summary: {
+    total_tasks: number;
+    completed_count: number;
+    completed_percentage: number;
+    skipped_count: number;
+    pending_count: number;
+  };
+  completed_items: Array<{ code: string; title: string; completed_at?: string | null }>;
+  pending_items: Array<{ code: string; title: string; reason: string }>;
   confidence_score: number;
+  compliance_status?: Record<string, string>;
+  access_provisioned?: Record<string, string>;
+  first_task_status?: {
+    ticket: string;
+    status: string;
+    pr_link: string;
+  };
+  source_template?: {
+    document_id: string;
+    template: string;
+    template_loaded: boolean;
+  };
+  notes?: string;
+  delivery_status?: string;
+  report_id?: string;
+  generated_at?: string;
+}
+
+export interface StarterTicket {
+  ticket_id: string;
+  title: string;
+  project: string;
+  issue_type: string;
+  priority: string;
+  story_points: string;
+  repository: string;
+  description: string;
+  acceptance_criteria: string[];
+  section: string;
+}
+
+export interface MCPAction {
+  tool_name: string;
+  status: string;
+  payload: Record<string, string>;
+}
+
+export interface GeneratedFAQ {
+  question: string;
+  answer: string;
+  source_ids: string[];
+  created_at: string;
 }
 
 interface AppState {
@@ -63,6 +137,11 @@ interface AppState {
   progressPercent: number;
   missingProfileFields: string[];
   completionEmail: CompletionEmailPayload | null;
+  completionEmailPreview: string | null;
+  assignedTicket: StarterTicket | null;
+  inferenceNotes: string[];
+  mcpActions: MCPAction[];
+  generatedFaqs: GeneratedFAQ[];
   isTyping: boolean;
   isLoadingChecklist: boolean;
   error: string | null;
@@ -80,14 +159,6 @@ async function readJson(response: Response) {
   return data;
 }
 
-function buildSourceFooter(sources: SourceReference[] | undefined): string {
-  if (!sources?.length) {
-    return '';
-  }
-  const formatted = sources.map((source) => `${source.source_id}`).join(', ');
-  return `\n\nSources: ${formatted}`;
-}
-
 const defaultProfile: Profile = {
   name: null,
   email: null,
@@ -95,6 +166,15 @@ const defaultProfile: Profile = {
   role: null,
   experience_level: null,
   tech_stack: [],
+  employee_id: null,
+  department: null,
+  manager_name: null,
+  manager_email: null,
+  mentor_name: null,
+  mentor_email: null,
+  location: null,
+  start_date: null,
+  matched_persona_name: null,
 };
 
 export const useStore = create<AppState>((set, get) => ({
@@ -106,14 +186,19 @@ export const useStore = create<AppState>((set, get) => ({
       id: 'welcome',
       sender: 'agent',
       content:
-        "Welcome to PS-03 onboarding. Start by telling me your name, role (Backend/Frontend/DevOps), experience level (Intern/Junior/Senior), and primary tech stack.",
+        "Welcome to ODA onboarding. Start by telling me your name, role (Backend/Frontend/DevOps), experience level (Intern/Junior/Senior), primary tech stack, and team/squad.",
       timestamp: new Date(),
     },
   ],
   checklist: [],
   progressPercent: 0,
-  missingProfileFields: ['name', 'role', 'experience_level', 'tech_stack'],
+  missingProfileFields: ['name', 'role', 'experience_level', 'tech_stack', 'team'],
   completionEmail: null,
+  completionEmailPreview: null,
+  assignedTicket: null,
+  inferenceNotes: [],
+  mcpActions: [],
+  generatedFaqs: [],
   isTyping: false,
   isLoadingChecklist: false,
   error: null,
@@ -151,7 +236,7 @@ export const useStore = create<AppState>((set, get) => ({
       const agentMessage: Message = {
         id: `a-${Date.now()}`,
         sender: 'agent',
-        content: `${data.message}${buildSourceFooter(data.sources)}`,
+        content: data.message,
         timestamp: new Date(),
         sources: data.sources,
       };
@@ -164,6 +249,11 @@ export const useStore = create<AppState>((set, get) => ({
         progressPercent: data.progress_percent ?? state.progressPercent,
         missingProfileFields: data.missing_profile_fields ?? state.missingProfileFields,
         completionEmail: data.completion_email ?? state.completionEmail,
+        completionEmailPreview: data.email_preview ?? state.completionEmailPreview,
+        assignedTicket: data.assigned_ticket ?? state.assignedTicket,
+        inferenceNotes: data.inference_notes ?? state.inferenceNotes,
+        mcpActions: data.mcp_actions ?? state.mcpActions,
+        generatedFaqs: data.generated_faqs ?? state.generatedFaqs,
         isTyping: false,
         messages: [...state.messages, agentMessage],
       }));
@@ -214,6 +304,8 @@ export const useStore = create<AppState>((set, get) => ({
         checklist: data.checklist ?? current.checklist,
         progressPercent: data.progress_percent ?? current.progressPercent,
         status: data.status ?? current.status,
+        assignedTicket: data.assigned_ticket ?? current.assignedTicket,
+        inferenceNotes: data.inference_notes ?? current.inferenceNotes,
         isLoadingChecklist: false,
       }));
     } catch (error) {
@@ -240,6 +332,7 @@ export const useStore = create<AppState>((set, get) => ({
       set((current) => ({
         status: 'completed',
         completionEmail: data.completion_email,
+        completionEmailPreview: data.email_preview ?? current.completionEmailPreview,
         isTyping: false,
         messages: [
           ...current.messages,

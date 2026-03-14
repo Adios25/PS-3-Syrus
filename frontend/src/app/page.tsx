@@ -1,32 +1,79 @@
 import React from "react";
 import ChatInterface from "@/components/ChatInterface";
 import Checklist from "@/components/Checklist";
+import SessionPanel from "@/components/SessionPanel";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Bot, Sparkles } from "lucide-react";
+
+const capabilities = [
+  {
+    label: "Analyze",
+    title: "Context-aware onboarding help",
+    description: "Grounded answers for setup, architecture, policies, org structure, and onboarding FAQs.",
+  },
+  {
+    label: "Code",
+    title: "Starter ticket and first-task path",
+    description: "The session assigns a first task and keeps the onboarding flow tied to actionable engineering work.",
+  },
+  {
+    label: "Sessions",
+    title: "Tracked flow execution",
+    description: "Progress, actions, grounded FAQs, and final HR handoff are shown as session activity.",
+  },
+  {
+    label: "Secure",
+    title: "Compliance and onboarding completion",
+    description: "Checklist completion and the HR handoff report remain explicit instead of buried in the chat.",
+  },
+];
 
 export default function Home() {
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,_#f0f9ff,_#f8fafc_40%,_#eef2ff)] text-slate-900 p-6 md:p-8">
-      <div className="max-w-7xl mx-auto space-y-6">
-        <header className="flex flex-col md:flex-row md:justify-between md:items-end gap-4 border-b border-slate-200 pb-4">
-          <div>
-            <p className="text-xs tracking-[0.25em] uppercase text-slate-500">Antigravity Engineering</p>
-            <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight text-slate-900 mt-1">PS-03 Autonomous Developer Onboarding</h1>
-            <p className="text-slate-600 mt-2 max-w-3xl text-sm md:text-base">
-              Chat-based onboarding agent with personalized checklists, grounded knowledge retrieval, and structured HR completion reporting.
-            </p>
+    <main className="min-h-screen bg-slate-50 text-slate-900">
+      <div className="border-b border-slate-200 bg-white shadow-sm">
+        <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-6 md:px-8 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex items-center gap-4">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-100 text-indigo-600 shadow-sm">
+              <Bot className="h-8 w-8" />
+            </div>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.2em] text-indigo-500 flex items-center gap-1">
+                <Sparkles className="h-3 w-3" />
+                Automated Onboarding
+              </p>
+              <h1 className="text-3xl font-bold tracking-tight text-slate-950">
+                ODA (Onboarding Developer Agent)
+              </h1>
+              <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">
+                A streamlined, intelligent workspace built around grounded chat and a role-specific onboarding plan.
+              </p>
+            </div>
           </div>
+        </div>
+      </div>
 
-          <div className="text-sm font-medium text-emerald-700 bg-emerald-50 px-4 py-2 rounded-full border border-emerald-200 self-start md:self-auto">
-            Environment: Local Demo
-          </div>
-        </header>
+      <div className="mx-auto max-w-7xl space-y-6 px-4 py-6 md:px-8">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {capabilities.map((item) => (
+            <Card key={item.label} className="border-slate-200 bg-white shadow-sm hover:shadow-md transition-shadow">
+              <CardHeader className="pb-3">
+                <Badge variant="outline" className="w-fit bg-slate-50 text-slate-600 border-slate-200">
+                  {item.label}
+                </Badge>
+                <CardTitle className="text-base text-slate-800 font-semibold">{item.title}</CardTitle>
+                <CardDescription className="text-slate-500">{item.description}</CardDescription>
+              </CardHeader>
+            </Card>
+          ))}
+        </div>
 
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
-          <div className="xl:col-span-1">
+        <div className="flex flex-col gap-6">
+          <ChatInterface />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <Checklist />
-          </div>
-
-          <div className="xl:col-span-2">
-            <ChatInterface />
+            <SessionPanel />
           </div>
         </div>
       </div>

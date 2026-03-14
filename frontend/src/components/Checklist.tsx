@@ -1,8 +1,15 @@
 "use client";
 
 import React from 'react';
-import { CheckCircle2, Circle, Mail, UserRound } from 'lucide-react';
+import { CheckCircle2, Circle, ClipboardList, Inbox, Mail, Sparkles, UserRound } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Progress } from '@/components/ui/progress';
+import { Separator } from '@/components/ui/separator';
 import { useStore } from '../store/useStore';
+import { StatusBadge } from './workflow/StatusBadge';
+import { EmptyState } from './common/EmptyState';
 
 export default function Checklist() {
   const {
@@ -14,103 +21,178 @@ export default function Checklist() {
     isLoadingChecklist,
     finalizeOnboarding,
     completionEmail,
+    assignedTicket,
+    inferenceNotes,
+    completionEmailPreview,
   } = useStore();
 
   const completedCount = checklist.filter((item) => item.is_completed).length;
-  const canFinalize = checklist.length > 0 && checklist.every((item) => item.is_completed) && status !== 'completed';
+  const allTasksComplete = checklist.length > 0 && checklist.every((item) => item.is_completed);
+  const canFinalize = allTasksComplete && !completionEmail;
+  const nextPending = checklist.find((item) => !item.is_completed);
+  const statusVariant = completionEmail ? 'success' : allTasksComplete ? 'warning' : 'secondary';
+  const statusLabel = completionEmail ? 'Completed' : allTasksComplete ? 'Ready for HR Handoff' : status === 'completed' ? 'Checklist Done' : 'Active';
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 h-full">
-      <div className="mb-6 space-y-4">
-        <div>
-          <h2 className="text-xl font-semibold text-slate-900">Personalized Onboarding Checklist</h2>
-          <p className="text-slate-500 text-sm mt-1">
-            Profile-aware onboarding path with completion tracking for HR handoff.
-          </p>
-        </div>
-
-        <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
-          <div className="flex items-center gap-2 text-sm text-slate-700 mb-2">
-            <UserRound size={16} />
-            <span>{profile.name || 'Name pending'} | {profile.role || 'Role pending'} | {profile.experience_level || 'Level pending'}</span>
+    <Card className="h-full">
+      <CardHeader className="space-y-4 pb-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <ClipboardList className="h-5 w-5 text-slate-700" />
+              Onboarding Plan
+            </CardTitle>
+            <CardDescription>
+              Role-specific onboarding path and essential integration tasks.
+            </CardDescription>
           </div>
-          <p className="text-xs text-slate-500">
-            Team: {profile.team || 'N/A'} | Stack: {profile.tech_stack.length ? profile.tech_stack.join(', ') : 'N/A'}
-          </p>
+          <Badge variant={statusVariant}>
+            {statusLabel}
+          </Badge>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
-            <div className="h-full bg-sky-600 transition-all duration-500 ease-out rounded-full" style={{ width: `${progressPercent}%` }} />
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+          <div className="flex items-center gap-2 text-sm text-slate-800">
+            <UserRound className="h-4 w-4 text-slate-500" />
+            <span className="font-medium">
+              {profile.name || 'Name pending'} • {profile.role || 'Role pending'} • {profile.experience_level || 'Level pending'}
+            </span>
           </div>
-          <span className="text-sm font-medium text-slate-700">{progressPercent}%</span>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Badge variant="outline">Team: {profile.team || 'Pending'}</Badge>
+            <Badge variant="outline">
+              Stack: {profile.tech_stack.length ? profile.tech_stack.join(', ') : 'Pending'}
+            </Badge>
+            {profile.matched_persona_name ? (
+              <Badge variant="secondary">{profile.matched_persona_name}</Badge>
+            ) : null}
+          </div>
+          {(profile.manager_name || profile.mentor_name) ? (
+            <p className="mt-3 text-sm text-slate-600">
+              Manager: {profile.manager_name || 'N/A'} | Mentor: {profile.mentor_name || 'N/A'}
+            </p>
+          ) : null}
         </div>
 
-        <p className="text-xs text-slate-500">
-          {completedCount}/{checklist.length} tasks complete | Status: {status === 'completed' ? 'Completed' : 'In Progress'}
-        </p>
-      </div>
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm font-medium text-slate-700">
+              {completedCount}/{checklist.length} tasks complete
+            </p>
+            <p className="text-sm font-semibold text-slate-900">{progressPercent}%</p>
+          </div>
+          <Progress value={progressPercent} />
+          <div className="flex flex-wrap gap-2">
+            {nextPending ? (
+              <Badge variant="warning">Next: {nextPending.checklist_code}</Badge>
+            ) : (
+              <Badge variant="success">All tasks completed</Badge>
+            )}
+            {assignedTicket ? <Badge variant="outline">{assignedTicket.ticket_id}</Badge> : null}
+          </div>
+        </div>
 
-      <div className="space-y-3 max-h-[340px] overflow-y-auto pr-1">
-        {checklist.map((item) => (
-          <button
-            key={item.item_id}
-            type="button"
-            onClick={() => toggleChecklistItem(item.item_id)}
-            disabled={isLoadingChecklist}
-            className={`w-full text-left flex items-start gap-4 p-4 rounded-xl border transition-all ${
-              item.is_completed
-                ? 'bg-slate-50 border-slate-200 opacity-80'
-                : 'bg-white border-sky-100 hover:border-sky-300 hover:shadow-sm'
-            }`}
-          >
-            <div className="flex-shrink-0 mt-0.5">
-              {item.is_completed ? (
-                <CheckCircle2 className="text-emerald-500" size={22} />
-              ) : (
-                <Circle className="text-slate-300" size={22} />
-              )}
-            </div>
-            <div>
-              <div className={`font-medium ${item.is_completed ? 'line-through text-slate-500' : 'text-slate-900'}`}>
-                #{item.item_id} {item.title}
+        {inferenceNotes.length > 0 ? (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            {inferenceNotes[inferenceNotes.length - 1]}
+          </div>
+        ) : null}
+      </CardHeader>
+
+      <CardContent className="space-y-4">
+        <Separator />
+
+        <div className="max-h-[420px] space-y-3 overflow-y-auto pr-1">
+          {Array.from(checklist).sort((a, b) => {
+            if (a.is_completed === b.is_completed) return 0;
+            return a.is_completed ? 1 : -1;
+          }).map((item) => (
+            <button
+              key={item.item_id}
+              type="button"
+              onClick={() => toggleChecklistItem(item.item_id)}
+              disabled={isLoadingChecklist}
+              className={`w-full rounded-2xl border p-4 text-left transition ${item.is_completed
+                  ? 'border-slate-200 bg-slate-50/80'
+                  : 'border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm'
+                }`}
+            >
+              <div className="flex items-start gap-4">
+                <div className="mt-0.5 shrink-0">
+                  {item.is_completed ? (
+                    <CheckCircle2 className="h-6 w-6 text-emerald-500" />
+                  ) : (
+                    <Circle className="h-6 w-6 text-slate-300" />
+                  )}
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant={item.is_completed ? 'success' : 'outline'}>
+                      {item.checklist_code || `#${item.item_id}`}
+                    </Badge>
+                    <Badge variant="secondary">{item.category}</Badge>
+                    <Badge variant="outline">{item.deadline}</Badge>
+                    {/* FLOW-FE-001: StatusBadge showing workflow-level status */}
+                    <StatusBadge status={item.is_completed ? 'active' : 'draft'} />
+                  </div>
+
+                  <p className={`mt-3 text-sm font-semibold leading-6 ${item.is_completed ? 'text-slate-500 line-through' : 'text-slate-950'}`}>
+                    {item.title}
+                  </p>
+
+                  <p className="mt-2 text-sm leading-6 text-slate-600">{item.description}</p>
+
+                  <div className="mt-3 flex flex-wrap items-center gap-2 text-xs uppercase tracking-[0.16em] text-slate-400">
+                    <span>Owner: {item.owner || 'Employee'}</span>
+                    <span>•</span>
+                    <span>Sources: {item.source_refs.join(', ')}</span>
+                  </div>
+                </div>
               </div>
-              <p className={`text-sm mt-1 ${item.is_completed ? 'text-slate-400' : 'text-slate-500'}`}>{item.description}</p>
-              <p className="text-xs text-slate-400 mt-1">Sources: {item.source_refs.join(', ')}</p>
-            </div>
-          </button>
-        ))}
+            </button>
+          ))}
 
-        {!checklist.length && (
-          <div className="text-sm text-slate-500 border border-dashed border-slate-300 rounded-xl p-4">
-            Checklist will appear once your profile is captured in chat.
-          </div>
-        )}
-      </div>
-
-      {canFinalize && (
-        <button
-          type="button"
-          onClick={finalizeOnboarding}
-          className="mt-5 w-full bg-emerald-600 text-white rounded-xl py-2.5 text-sm font-medium hover:bg-emerald-700 transition"
-        >
-          Finalize Onboarding and Notify HR
-        </button>
-      )}
-
-      {completionEmail && (
-        <div className="mt-5 border border-emerald-200 bg-emerald-50 rounded-xl p-4 space-y-2 text-sm">
-          <div className="flex items-center gap-2 text-emerald-800 font-medium">
-            <Mail size={16} />
-            <span>HR Completion Email Generated</span>
-          </div>
-          <p className="text-emerald-900">To: {completionEmail.to}</p>
-          <p className="text-emerald-900">Subject: {completionEmail.subject}</p>
-          <p className="text-emerald-900">Completed Items: {completionEmail.summary.completed_items.length}</p>
-          <p className="text-emerald-900">Pending Items: {completionEmail.summary.pending_items.length}</p>
-          <p className="text-emerald-900">Confidence Score: {completionEmail.confidence_score}</p>
+          {/* FLOW-FE-002: EmptyState when no checklist items are loaded yet */}
+          {!checklist.length ? (
+            <EmptyState
+              icon={<Inbox className="h-6 w-6" />}
+              title="No checklist items yet"
+              description="The checklist appears after the onboarding profile is captured in chat."
+            />
+          ) : null}
         </div>
-      )}
-    </div>
+
+        {canFinalize ? (
+          <Button type="button" variant="success" className="w-full" onClick={finalizeOnboarding}>
+            <Sparkles className="h-4 w-4" />
+            Generate HR Handoff
+          </Button>
+        ) : null}
+
+        {completionEmail ? (
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+            <div className="flex items-center gap-2 text-emerald-900">
+              <Mail className="h-4 w-4" />
+              <p className="text-sm font-semibold">HR completion report generated</p>
+            </div>
+            <div className="mt-3 grid gap-2 text-sm text-emerald-900 sm:grid-cols-2">
+              <p>Completed items: {completionEmail.completed_items.length}</p>
+              <p>Pending items: {completionEmail.pending_items.length}</p>
+              <p>Confidence score: {completionEmail.confidence_score}%</p>
+              <p>Delivery status: {completionEmail.delivery_status || 'sent'}</p>
+              {completionEmail.to?.length ? (
+                <p className="sm:col-span-2">Sent to: {completionEmail.to.join(', ')}</p>
+              ) : null}
+            </div>
+            {completionEmailPreview ? (
+              <p className="mt-3 text-xs uppercase tracking-[0.18em] text-emerald-700">
+                Full preview available in the HR report panel below.
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+      </CardContent>
+    </Card>
   );
 }

@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "PS-03 Autonomous Onboarding Agent",
-  description: "Personalized developer onboarding powered by an autonomous chat agent.",
+  title: "ODA (Onboarding Developer Agent)",
+  description: "Source-grounded developer onboarding console.",
 };
 
 export default function RootLayout({
@@ -13,7 +13,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className="antialiased">
+      <body className="bg-background text-foreground antialiased">
         {children}
       </body>
     </html>
