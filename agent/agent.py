@@ -3,17 +3,23 @@ from langchain_openai import ChatOpenAI
 from pydantic_settings import BaseSettings
 
 class AgentSettings(BaseSettings):
-    OPENAI_API_KEY: str = ""
+    NVIDIA_API_KEY: str = ""
     LANGCHAIN_API_KEY: str = ""
     LANGCHAIN_TRACING_V2: str = "true"
 
     class Config:
         env_file = ".env"
+        extra = "ignore"
 
 settings = AgentSettings()
 
-# Example Initialization - Ensure API Key is passed via ENV
-llm = ChatOpenAI(model="gpt-4", temperature=0)
+# Initialize the LLM via NVIDIA's OpenAI-compatible endpoint using the nvapi key
+llm = ChatOpenAI(
+    base_url="https://integrate.api.nvidia.com/v1",
+    api_key=settings.NVIDIA_API_KEY,
+    model="meta/llama-3.1-70b-instruct",
+    temperature=0
+)
 
 system_prompt = SystemMessage(
     content="""You are an expert Autonomous Developer Onboarding Agent (PS-03).

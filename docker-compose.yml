@@ -1,4 +1,3 @@
-version: '3.8'
 
 services:
   frontend:
@@ -10,9 +9,8 @@ services:
     environment:
       - NEXT_PUBLIC_API_URL=http://localhost:8000
       - NEXT_PUBLIC_AGENT_URL=http://localhost:8001
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
+    # No volume mounts: the standalone build output lives inside the image.
+    # Mounting ./frontend:/app would overwrite the compiled server.js.
     depends_on:
       - backend
 
