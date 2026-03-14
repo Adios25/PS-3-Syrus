@@ -37,6 +37,13 @@ async def execute_tool(request: ToolCallRequest):
             "message": f"Invited {request.arguments.get('email')} to onboarding channel.",
         }
 
+    if request.tool_name == "send_slack_welcome":
+        return {
+            "status": "success",
+            "channel": request.arguments.get("channel", "#new-joiners"),
+            "message": f"Posted welcome message for {request.arguments.get('name')}.",
+        }
+
     if request.tool_name == "send_hr_completion_email":
         return {
             "status": "success",

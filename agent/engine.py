@@ -18,7 +18,12 @@ app = FastAPI(title="PS-03 Agent API", version="0.2.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:8000"],
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -99,16 +104,22 @@ async def start_session(request: StartSessionRequest) -> dict:
         "checklist": [
             {
                 "item_id": item.item_id,
+                "checklist_code": item.checklist_code,
                 "title": item.title,
                 "description": item.description,
                 "category": item.category,
+                "owner": item.owner,
+                "deadline": item.deadline,
                 "source_refs": item.source_refs,
                 "is_completed": item.is_completed,
+                "completed_at": item.completed_at,
             }
             for item in session.checklist
         ],
         "progress_percent": session.progress_percent,
         "missing_profile_fields": session.persona.missing_fields(),
+        "assigned_ticket": orchestrator.serialize_ticket(session.assigned_ticket),
+        "inference_notes": session.inference_notes,
     }
 
 
@@ -131,17 +142,23 @@ async def get_session(session_id: str) -> dict:
         "checklist": [
             {
                 "item_id": item.item_id,
+                "checklist_code": item.checklist_code,
                 "title": item.title,
                 "description": item.description,
                 "category": item.category,
+                "owner": item.owner,
+                "deadline": item.deadline,
                 "source_refs": item.source_refs,
                 "is_completed": item.is_completed,
+                "completed_at": item.completed_at,
             }
             for item in session.checklist
         ],
         "progress_percent": session.progress_percent,
         "missing_profile_fields": session.persona.missing_fields(),
         "completion_email": session.completion_email.payload if session.completion_email else None,
+        "assigned_ticket": orchestrator.serialize_ticket(session.assigned_ticket),
+        "inference_notes": session.inference_notes,
     }
 
 
@@ -176,14 +193,20 @@ async def update_profile(session_id: str, request: UpdateProfileRequest) -> dict
         "checklist": [
             {
                 "item_id": item.item_id,
+                "checklist_code": item.checklist_code,
                 "title": item.title,
                 "description": item.description,
                 "category": item.category,
+                "owner": item.owner,
+                "deadline": item.deadline,
                 "source_refs": item.source_refs,
                 "is_completed": item.is_completed,
+                "completed_at": item.completed_at,
             }
             for item in session.checklist
         ],
+        "assigned_ticket": orchestrator.serialize_ticket(session.assigned_ticket),
+        "inference_notes": session.inference_notes,
     }
 
 
@@ -207,14 +230,20 @@ async def update_checklist_item(session_id: str, item_id: int, request: Checklis
         "checklist": [
             {
                 "item_id": item.item_id,
+                "checklist_code": item.checklist_code,
                 "title": item.title,
                 "description": item.description,
                 "category": item.category,
+                "owner": item.owner,
+                "deadline": item.deadline,
                 "source_refs": item.source_refs,
                 "is_completed": item.is_completed,
+                "completed_at": item.completed_at,
             }
             for item in session.checklist
         ],
+        "assigned_ticket": orchestrator.serialize_ticket(session.assigned_ticket),
+        "inference_notes": session.inference_notes,
     }
 
 

@@ -1,30 +1,67 @@
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Iterable, List
+
 from langchain_core.documents import Document
+
 from .vector_store import get_vector_store
 
-def ingest_mock_documents():
-    """
-    Mocks an ingestion pipeline.
-    In real usage, this reads from PDF, Confluence, or GitHub Markdown.
-    """
-    store = get_vector_store()
-    
-    docs = [
-        Document(
-            page_content="To set up your environment, install Node.js 20 and Python 3.11. Run `npx create-next-app` for frontend.",
-            metadata={"source": "engineering-setup-guide", "role": "developer"}
-        ),
-        Document(
-            page_content="Use PostgreSQL for all relational data. Request DB credentials via Jira ticket ONB-REQ.",
-            metadata={"source": "database-standards", "role": "developer"}
-        ),
-        Document(
-            page_content="Design requests are handled in Figma. Marketing team members need a Figma Pro license.",
-            metadata={"source": "design-tools", "role": "designer"}
+
+def _read_markdown(path: Path) -> str:
+    return path.read_text(encoding="utf-8")
+
+
+def _read_pdf(path: Path) -> str:
+    try:
+        from pypdf import PdfReader
+    except ModuleNotFoundError as exc:
+        raise RuntimeError("PDF ingestion requires 'pypdf'. Install it in agent requirements.") from exc
+
+    reader = PdfReader(str(path))
+    pages = [(page.extract_text() or "").strip() for page in reader.pages]
+    return "\n".join([page for page in pages if page])
+
+
+def load_documents_from_paths(paths: Iterable[Path]) -> List[Document]:
+    documents: List[Document] = []
+    for path in paths:
+        suffix = path.suffix.lower()
+        if suffix == ".md":
+            content = _read_markdown(path)
+        elif suffix == ".pdf":
+            content = _read_pdf(path)
+        else:
+            continue
+
+        if not content.strip():
+            continue
+
+        documents.append(
+            Document(
+                page_content=content,
+                metadata={
+                    "source": path.name,
+                    "format": suffix.lstrip("."),
+                },
+            )
         )
-    ]
-    
-    # store.add_documents(docs)
-    print(f"Mocked ingestion of {len(docs)} enterprise documents.")
+    return documents
+
+
+def ingest_documents(paths: Iterable[str]) -> int:
+    file_paths = [Path(path).expanduser().resolve() for path in paths]
+    docs = load_documents_from_paths(file_paths)
+    store = get_vector_store()
+    if hasattr(store, "add_documents"):
+        store.add_documents(docs)
+    return len(docs)
+
 
 if __name__ == "__main__":
-    ingest_mock_documents()
+    # Example:
+    # python -m rag.ingest ~/docs/setup_guides.pdf ~/docs/onboarding_faq.md
+    import sys
+
+    count = ingest_documents(sys.argv[1:])
+    print(f"Ingested {count} documents.")

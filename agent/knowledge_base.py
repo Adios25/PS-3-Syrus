@@ -1,99 +1,44 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable, Sequence
+from functools import lru_cache
+from pathlib import Path
+from typing import Iterable, List, Optional, Sequence, Set, Tuple
 import re
 
 
-@dataclass(frozen=True)
-class KnowledgeDoc:
-    source_id: str
-    title: str
-    section: str
-    roles: tuple[str, ...]
-    stacks: tuple[str, ...]
-    content: str
+RESOURCE_DIR = Path(__file__).resolve().parent / "resources" / "ps03"
 
-
-KNOWLEDGE_BASE: tuple[KnowledgeDoc, ...] = (
-    KnowledgeDoc(
-        source_id="ENG-SETUP-001",
-        title="Engineering Environment Setup",
-        section="Local Development Baseline",
-        roles=("backend", "frontend", "devops"),
-        stacks=("python", "node", "java", "go"),
-        content=(
-            "Install Node.js 20+, Python 3.11+, and Docker Desktop. Clone repositories, copy .env templates, "
-            "run docker compose up --build, and verify services at localhost ports 3000, 8000, and 8001."
-        ),
-    ),
-    KnowledgeDoc(
-        source_id="ENG-SETUP-002",
-        title="Backend Service Setup",
-        section="API Service Bootstrapping",
-        roles=("backend",),
-        stacks=("python", "java", "node"),
-        content=(
-            "Backend developers should install dependencies with pip install -r requirements.txt, run alembic upgrade head, "
-            "and start FastAPI with uvicorn app.main:app --reload. Validate health at /health and docs at /docs."
-        ),
-    ),
-    KnowledgeDoc(
-        source_id="ENG-SETUP-003",
-        title="Frontend Service Setup",
-        section="UI Service Bootstrapping",
-        roles=("frontend",),
-        stacks=("node",),
-        content=(
-            "Frontend developers run npm ci, then npm run dev inside /frontend. Use NEXT_PUBLIC_API_URL to point to backend. "
-            "Validate UI at localhost:3000 and lint with npm run lint before opening pull requests."
-        ),
-    ),
-    KnowledgeDoc(
-        source_id="ENG-SETUP-004",
-        title="DevOps Setup Standards",
-        section="Infrastructure Toolchain",
-        roles=("devops",),
-        stacks=("python", "go", "java", "node"),
-        content=(
-            "DevOps onboarding requires kubectl, helm, and terraform setup. Request cloud sandbox access via Jira template ONB-REQ, "
-            "configure read-only production dashboards, and validate CI workflows in GitHub Actions."
-        ),
-    ),
-    KnowledgeDoc(
-        source_id="SEC-POL-001",
-        title="Security and Compliance Policy",
-        section="Mandatory Security Tasks",
-        roles=("backend", "frontend", "devops"),
-        stacks=("python", "node", "java", "go"),
-        content=(
-            "All engineers must complete secure coding training, enable MFA on GitHub and Slack, and review incident escalation runbooks "
-            "within the first onboarding week. Compliance is required before production permissions are granted."
-        ),
-    ),
-    KnowledgeDoc(
-        source_id="ARCH-STD-001",
-        title="Platform Architecture Overview",
-        section="Service Boundaries",
-        roles=("backend", "frontend", "devops"),
-        stacks=("python", "node", "java", "go"),
-        content=(
-            "The platform uses Next.js frontend, FastAPI backend, and an agent service. PostgreSQL stores transactional data, "
-            "Redis supports cache and pub-sub, and pgvector supports semantic retrieval for internal knowledge queries."
-        ),
-    ),
-    KnowledgeDoc(
-        source_id="OPS-PROC-001",
-        title="Internal Process Playbook",
-        section="Communication and Delivery",
-        roles=("backend", "frontend", "devops"),
-        stacks=("python", "node", "java", "go"),
-        content=(
-            "New hires join #engineering-onboarding in Slack, attend architecture walkthroughs, and follow Jira workflow rules: "
-            "backlog refinement, active development, code review, and done after QA validation."
-        ),
-    ),
+# Tier-1 searchable files from the official PS03 dataset.
+RAG_FILES = (
+    "company_overview.md",
+    "engineering_standards.md",
+    "architecture_documentation.md",
+    "setup_guides.md",
+    "policies.md",
+    "org_structure.md",
+    "onboarding_faq.md",
 )
+
+ROLE_HINTS = {
+    "company_overview.md": {"backend", "frontend", "devops"},
+    "engineering_standards.md": {"backend", "frontend", "devops"},
+    "architecture_documentation.md": {"backend", "frontend", "devops"},
+    "setup_guides.md": {"backend", "frontend", "devops"},
+    "policies.md": {"backend", "frontend", "devops"},
+    "org_structure.md": {"backend", "frontend", "devops"},
+    "onboarding_faq.md": {"backend", "frontend", "devops"},
+}
+
+STACK_HINTS = {
+    "company_overview.md": {"python", "node", "java", "react", "aws", "kubernetes"},
+    "engineering_standards.md": {"python", "node", "typescript", "react", "java"},
+    "architecture_documentation.md": {"python", "node", "java", "kafka", "redis", "postgresql"},
+    "setup_guides.md": {"python", "node", "react", "java", "docker"},
+    "policies.md": {"aws", "vpn"},
+    "org_structure.md": {"backend", "frontend", "devops"},
+    "onboarding_faq.md": {"python", "node", "react", "docker", "vpn"},
+}
 
 STOPWORDS = {
     "a",
@@ -122,7 +67,24 @@ STOPWORDS = {
 }
 
 
-def _tokenize(text: str) -> set[str]:
+@dataclass(frozen=True)
+class KnowledgeDoc:
+    source_id: str
+    title: str
+    section: str
+    content: str
+    roles: Tuple[str, ...]
+    stacks: Tuple[str, ...]
+    source_file: str
+
+
+@dataclass(frozen=True)
+class IndexedDoc:
+    doc: KnowledgeDoc
+    tokens: Set[str]
+
+
+def _tokenize(text: str) -> Set[str]:
     return {
         token
         for token in re.findall(r"[a-z0-9]+", text.lower())
@@ -130,47 +92,115 @@ def _tokenize(text: str) -> set[str]:
     }
 
 
+def _extract_document_id(text: str, fallback: str) -> str:
+    match = re.search(r"Document ID:\s*([A-Z0-9-]+)", text)
+    if match:
+        return match.group(1)
+    return fallback
+
+
+def _extract_title(text: str, fallback: str) -> str:
+    match = re.search(r"^#\s+(.+)$", text, flags=re.MULTILINE)
+    if match:
+        return match.group(1).strip()
+    return fallback
+
+
+def _split_sections(markdown: str) -> List[Tuple[str, str]]:
+    matches = list(re.finditer(r"(?m)^##+\s+(.+)$", markdown))
+    sections: List[Tuple[str, str]] = []
+
+    if not matches:
+        body = markdown.strip()
+        if body:
+            sections.append(("Overview", body))
+        return sections
+
+    for idx, match in enumerate(matches):
+        heading = match.group(1).strip()
+        start = match.end()
+        end = matches[idx + 1].start() if idx + 1 < len(matches) else len(markdown)
+        body = markdown[start:end].strip()
+        if body:
+            sections.append((heading, body))
+
+    return sections
+
+
+@lru_cache(maxsize=1)
+def _load_index() -> Tuple[IndexedDoc, ...]:
+    indexed_docs: List[IndexedDoc] = []
+
+    for file_name in RAG_FILES:
+        file_path = RESOURCE_DIR / file_name
+        if not file_path.exists():
+            continue
+
+        text = file_path.read_text(encoding="utf-8")
+        source_id = _extract_document_id(text, fallback=file_name.replace(".md", "").upper())
+        title = _extract_title(text, fallback=file_name.replace("_", " ").title())
+        sections = _split_sections(text)
+
+        for heading, body in sections:
+            doc = KnowledgeDoc(
+                source_id=source_id,
+                title=title,
+                section=heading,
+                content=body,
+                roles=tuple(sorted(ROLE_HINTS.get(file_name, set()))),
+                stacks=tuple(sorted(STACK_HINTS.get(file_name, set()))),
+                source_file=file_name,
+            )
+            tokens = _tokenize(f"{title} {heading} {body}")
+            indexed_docs.append(IndexedDoc(doc=doc, tokens=tokens))
+
+    return tuple(indexed_docs)
+
+
 def retrieve_documents(
     query: str,
-    role: str | None = None,
-    stacks: Sequence[str] | None = None,
+    role: Optional[str] = None,
+    stacks: Optional[Sequence[str]] = None,
     top_k: int = 3,
-) -> list[KnowledgeDoc]:
-    """
-    Lightweight lexical retrieval that prioritizes role and stack matches.
-    This keeps responses grounded in the known document set.
-    """
+) -> List[KnowledgeDoc]:
     query_tokens = _tokenize(query)
     if not query_tokens:
         return []
 
-    stack_set = {s.lower() for s in (stacks or [])}
-    scored: list[tuple[float, KnowledgeDoc]] = []
+    stack_set = {stack.lower() for stack in (stacks or [])}
+    scored: List[Tuple[float, KnowledgeDoc]] = []
 
-    for doc in KNOWLEDGE_BASE:
-        doc_tokens = _tokenize(doc.content + " " + doc.title + " " + doc.section)
-        overlap = len(query_tokens & doc_tokens)
+    for indexed in _load_index():
+        overlap = len(query_tokens.intersection(indexed.tokens))
         if overlap == 0:
             continue
 
         score = float(overlap)
-        if role and role.lower() in doc.roles:
+        if role and role.lower() in indexed.doc.roles:
             score += 1.0
-        if stack_set and stack_set.intersection(doc.stacks):
-            score += 0.5
+        if stack_set and stack_set.intersection(indexed.doc.stacks):
+            score += 0.75
 
-        scored.append((score, doc))
+        scored.append((score, indexed.doc))
 
     scored.sort(key=lambda item: item[0], reverse=True)
     return [doc for _, doc in scored[:top_k]]
 
 
-def format_sources(docs: Iterable[KnowledgeDoc]) -> list[dict[str, str]]:
-    return [
-        {
-            "source_id": doc.source_id,
-            "title": doc.title,
-            "section": doc.section,
-        }
-        for doc in docs
-    ]
+def format_sources(docs: Iterable[KnowledgeDoc]) -> List[dict]:
+    seen = set()
+    sources: List[dict] = []
+    for doc in docs:
+        key = (doc.source_id, doc.section)
+        if key in seen:
+            continue
+        seen.add(key)
+        sources.append(
+            {
+                "source_id": doc.source_id,
+                "title": doc.title,
+                "section": doc.section,
+                "source_file": doc.source_file,
+            }
+        )
+    return sources
